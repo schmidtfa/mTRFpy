@@ -14,6 +14,7 @@ from mtrf.matrices import (
     _check_data,
     _get_xy,
 )
+from _mi import gcmi_cc 
 
 try:
     from matplotlib import pyplot as plt
@@ -202,12 +203,13 @@ class TRF:
             cov_xx, cov_xy = covariance_matrices(xs, ys, lags, self.zeropad, self.bias)
             r = np.zeros(len(regularization))
             mse = np.zeros(len(regularization))
+            mi = np.zeros(len(regularization))
             for ir in _progressbar(
                 range(len(regularization)),
                 "Hyperparameter optimization",
                 verbose=verbose,
             ):
-                r[ir], mse[ir] = _cross_validate(
+                r[ir], mse[ir], mi[ir] = _cross_validate(
                     self.copy(),
                     xs,
                     ys,
@@ -221,9 +223,10 @@ class TRF:
                     average=average,
                     verbose=verbose,
                 )
-            best_regularization = list(regularization)[np.argmin(mse)]
+            #best_regularization = list(regularization)[np.argmin(mse)]
+            best_regularization = list(regularization)[np.argmax(mi)]
             self._train(xs, ys, fs, tmin, tmax, best_regularization)
-            return r, mse
+            return r, mse, mi
 
     def _train(self, xs, ys, fs, tmin, tmax, regularization):
         if isinstance(self.bias, np.ndarray):  # reset bias if trf is already trained
@@ -350,17 +353,18 @@ class TRF:
         cov_xx, cov_xy = covariance_matrices(xs, ys, lags, self.zeropad, self.bias)
         splits = np.array_split(np.arange(n_trials), k)
         n_splits = len(splits)
-        r_test, mse_test, best_regularization = [np.zeros(n_splits) for _ in range(3)]
+        r_test, mse_test, mi_test, best_regularization = [np.zeros(n_splits) for _ in range(4)]
         for isplit in range(n_splits):
             idx_test = splits[isplit]
             idx_train_val = np.concatenate(splits[:isplit] + splits[isplit + 1 :])
             mse = np.zeros(len(regularization))
+            mi = np.zeros(len(regularization))
             for ir in _progressbar(
                 range(len(regularization)),
                 "Hyperparameter optimization",
                 verbose=verbose,
             ):
-                _, mse[ir] = _cross_validate(
+                _, mse[ir], mi[ir] = _cross_validate(
                     self.copy(),
                     [xs[i] for i in idx_train_val],
                     [ys[i] for i in idx_train_val],
@@ -374,7 +378,8 @@ class TRF:
                     average=average,
                     verbose=verbose,
                 )
-            best_regularization[isplit] = list(regularization)[np.argmin(mse)]
+            #best_regularization[isplit] = list(regularization)[np.argmin(mse)]
+            best_regularization[isplit] = list(regularization)[np.argmin(mi)]
             self.train(
                 [stimulus[i] for i in idx_train_val],
                 [response[i] for i in idx_train_val],
@@ -383,10 +388,10 @@ class TRF:
                 tmax,
                 best_regularization[isplit],
             )
-            _, r_test[isplit], mse_test[isplit] = self.predict(
+            _, r_test[isplit], mse_test[isplit], mi_test[isplit] = self.predict(
                 [stimulus[i] for i in idx_test], [response[i] for i in idx_test]
             )
-        return r_test, mse_test, best_regularization
+        return r_test, mse_test, mi_test, best_regularization
 
     def predict(
         self,
@@ -449,7 +454,7 @@ class TRF:
 
         xs, ys = _get_xy(stimulus, response, direction=self.direction)
         prediction = [np.zeros((x.shape[0], self.weights.shape[-1])) for x in xs]
-        r, mse = [], []  # output lists
+        r, mse, mi = [], [], []  # output lists
         for i, (x, y) in enumerate(zip(xs, ys)):
             lags = list(
                 range(
@@ -481,14 +486,15 @@ class TRF:
                     np.mean((y - y.mean(0)) * (y_pred - y_pred.mean(0)), 0)
                     / (y.std(0) * y_pred.std(0))
                 )
+                mi.append(gcmi_cc(y, y_pred))
             prediction[i][:] = y_pred
         if ys[0] is not None:
-            r, mse = np.mean(r, axis=0), np.mean(mse, axis=0)  # average across trials
+            r, mse, mi = np.mean(r, axis=0), np.mean(mse, axis=0), np.mean(mi, axis=0)  # average across trials
             if isinstance(average, list) or isinstance(average, np.ndarray):
-                r, mse = r[average], mse[average]  # select a subset of predictions
+                r, mse, mi = r[average], mse[average], mi[average]  # select a subset of predictions
             if average is not False:
-                r, mse = np.mean(r), np.mean(mse)
-            return prediction, r, mse
+                r, mse, mi = np.mean(r), np.mean(mse), np.mean(mi)
+            return prediction, r, mse, mi
         else:
             return prediction
 
