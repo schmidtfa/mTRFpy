@@ -1,3 +1,4 @@
+#%%
 from pathlib import Path
 import numpy as np
 from mtrf.model import TRF
@@ -79,3 +80,5 @@ def test_transform():
     np.testing.assert_almost_equal(trf_trans_enc.weights * scale, w * scale, decimal=11)
     np.testing.assert_equal(trf_trans_enc.times, t[0] / 1e3)
     assert trf_trans_enc.direction == direction
+
+# %%

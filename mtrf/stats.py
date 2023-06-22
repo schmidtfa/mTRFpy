@@ -78,10 +78,10 @@ def cross_validate(
     x, y, tmin, tmax = _get_xy(stimulus, response, tmin, tmax, model.direction)
     lags = list(range(int(np.floor(tmin * fs)), int(np.ceil(tmax * fs)) + 1))
     cov_xx, cov_xy = covariance_matrices(x, y, lags, model.zeropad, model.bias)
-    r, mse = _cross_validate(
+    r, mse, mi = _cross_validate(
         model, x, y, cov_xx, cov_xy, lags, fs, regularization, k, average, verbose
     )
-    return r, mse
+    return r, mse, mi
 
 
 def _cross_validate(
@@ -110,9 +110,9 @@ def _cross_validate(
     random.shuffle(splits)
     splits = np.array_split(splits, k)
     if average is not False:
-        r, mse = np.zeros(k), np.zeros(k)
+        r, mse, mi = np.zeros(k), np.zeros(k), np.zeros(k)
     else:
-        r, mse = np.zeros((k, y[0].shape[-1])), np.zeros((k, y[0].shape[-1]))
+        r, mse, mi = np.zeros((k, y[0].shape[-1])), np.zeros((k, y[0].shape[-1])), np.zeros((k, y[0].shape[-1]))
     for isplit in _progressbar(range(len(splits)), "Cross-validating", verbose=verbose):
         idx_val = splits[isplit]
         idx_train = np.concatenate(splits[:isplit] + splits[isplit + 1 :])  # flatten
@@ -130,11 +130,11 @@ def _cross_validate(
         # use the model to predict the test data
         x_test, y_test = [x[i] for i in idx_val], [y[i] for i in idx_val]
         if model.direction == 1:
-            _, r_test, mse_test = trf.predict(x_test, y_test, average=average)
+            _, r_test, mse_test, mi_test = trf.predict(x_test, y_test, average=average)
         elif model.direction == -1:
-            _, r_test, mse_test = trf.predict(y_test, x_test, average=average)
-        r[isplit], mse[isplit] = r_test, mse_test
-    return r.mean(axis=0), mse.mean(axis=0)
+            _, r_test, mse_test, mi_test = trf.predict(y_test, x_test, average=average)
+        r[isplit], mse[isplit], mi[isplit] = r_test, mse_test, mi_test
+    return r.mean(axis=0), mse.mean(axis=0), mi.mean(axis=0)
 
 
 def permutation_distribution(
@@ -213,26 +213,27 @@ def permutation_distribution(
         trf = model.copy()
         trf.train(stimulus[c[0]], response[c[1]], fs, tmin, tmax, regularization)
         models.append(trf)
-    r, mse = np.zeros(n_permute), np.zeros(n_permute)
+    r, mse, mi = np.zeros(n_permute), np.zeros(n_permute), np.zeros(n_permute)
     for iperm in _progressbar(range(n_permute), "Permuting", verbose=verbose):
         idx = []
         for i in range(len(xs)):  # make sure eachx x only appears once
             idx.append(random.choice(np.where(combinations[:, 0] == i)[0]))
         random.shuffle(idx)
         idx = np.array_split(idx, k)
-        perm_r, perm_mse = [], []  # r and mse for this permuttaion
+        perm_r, perm_mse, perm_mi = [], [], []  # r and mse for this permuttaion
         for isplit in range(len(idx)):
             idx_val = idx[isplit]
             idx_train = np.concatenate(idx[:isplit] + idx[isplit + 1 :])
             perm_model = np.mean([models[i] for i in idx_train])
             stimulus_val = [stimulus[combinations[i][0]] for i in idx_val]
             response_val = [response[combinations[i][1]] for i in idx_val]
-            _, fold_r, fold_mse = perm_model.predict(stimulus_val, response_val)
+            _, fold_r, fold_mse, fold_mi = perm_model.predict(stimulus_val, response_val)
             perm_r.append(fold_r)
             perm_mse.append(fold_mse)
-        r[iperm], mse[iperm] = np.mean(perm_r), np.mean(perm_mse)
+            perm_mi.append(fold_mi)
+        r[iperm], mse[iperm], mi[iperm] = np.mean(perm_r), np.mean(perm_mse), np.mean(perm_mi)
 
-    return r, mse
+    return r, mse, mi
 
 
 def _progressbar(it, prefix="", size=50, out=sys.stdout, verbose=True):
