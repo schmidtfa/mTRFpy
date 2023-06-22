@@ -14,7 +14,7 @@ from mtrf.matrices import (
     _check_data,
     _get_xy,
 )
-from _mi import gcmi_cc 
+from mutual_information import gcmi_cc 
 
 try:
     from matplotlib import pyplot as plt
