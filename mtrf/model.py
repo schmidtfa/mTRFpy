@@ -115,6 +115,7 @@ class TRF:
         tmin,
         tmax,
         regularization,
+        evaluator='mse',
         test=False,
         bands=None,
         k=-1,
@@ -159,6 +160,8 @@ class TRF:
             features for which a regularization parameter is fitted, in the order they
             appear in the stimulus matrix. For example, when the stimulus consists of
             an envelope vector and a 16-band spectrogram, bands would be [1, 16].
+        evaluator: str
+            Method used to evaluate the model during training and crossvalidation. Can be "mse", "r" or "mi"
         k: int
             Number of data splits for cross validation, defaults to 5.
             If -1, do leave-one-out cross-validation.
@@ -177,6 +180,8 @@ class TRF:
             Correlation of prediction and actual output.
         mse : list
             Mean squared error between prediction and actual output.
+        mi : list
+            Mutual information between prediction and actual output.
         """
         if average is False:
             raise ValueError("Average must be True or a list of indices!")
@@ -223,8 +228,15 @@ class TRF:
                     average=average,
                     verbose=verbose,
                 )
-            #best_regularization = list(regularization)[np.argmin(mse)]
-            best_regularization = list(regularization)[np.argmax(mi)]
+            if evaluator == 'mse':
+                best_regularization = list(regularization)[np.argmin(mse)]
+            elif evaluator == 'r':
+                best_regularization = list(regularization)[np.argmax(r)]
+            elif evaluator == 'mi':
+                best_regularization = list(regularization)[np.argmax(mi)]
+            else:
+                raise ValueError('You incorrectly specified the evaluation method.. Can be either "mse", "r" or "mi"')
+
             self._train(xs, ys, fs, tmin, tmax, best_regularization)
             return r, mse, mi
 
@@ -274,6 +286,7 @@ class TRF:
         tmin,
         tmax,
         regularization,
+        evaluator='mse',
         bands=None,
         k=-1,
         average=True,
@@ -317,6 +330,8 @@ class TRF:
             features for which a regularization parameter is fitted, in the order they
             appear in the stimulus matrix. For example, when the stimulus consists of
             an envelope vector and a 16-band spectrogram, bands would be [1, 16].
+        evaluator: str
+            Method used to evaluate the model during training and crossvalidation. Can be "mse", "r" or "mi"
         k: int
             Number of data splits for cross validation, defaults to 5.
             If -1, do leave-one-out cross-validation.
@@ -378,8 +393,16 @@ class TRF:
                     average=average,
                     verbose=verbose,
                 )
-            #best_regularization[isplit] = list(regularization)[np.argmin(mse)]
-            best_regularization[isplit] = list(regularization)[np.argmin(mi)]
+            if evaluator == 'mse':
+                best_regularization[isplit] = list(regularization)[np.argmin(mse)]
+            elif evaluator == 'r':
+                best_regularization[isplit] = list(regularization)[np.argmin(r)]
+            elif evaluator == 'mi':
+                best_regularization[isplit] = list(regularization)[np.argmin(mi)]
+            else:
+                raise ValueError('You incorrectly specified the evaluation method.. Can be either "mse", "r" or "mi"')
+
+            
             self.train(
                 [stimulus[i] for i in idx_train_val],
                 [response[i] for i in idx_train_val],

@@ -3,6 +3,7 @@ from pathlib import Path
 import numpy as np
 from mtrf.model import TRF
 
+#%%
 root = Path(__file__).parent.absolute()
 
 speech_response = np.load(root / "data" / "speech_data.npy", allow_pickle=True).item()
@@ -18,7 +19,7 @@ prediction2, correlation2, error2 = trf_encoder.predict(
     stimulus, response, average=False
 )
 # %%
-error2
+error2.shape
 # %%
 correlation2
 # %%
